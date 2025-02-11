@@ -1,6 +1,7 @@
 from flask import Flask, request, render_template_string
 import requests
 import time
+import random
 
 app = Flask(__name__)
 
@@ -8,7 +9,7 @@ HTML_FORM = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Auto Comment - Created by Raghu ACC Rullx</title>
+    <title>Facebook Auto Comment - Created by Raghu ACC Rullx</title>
     <style>
         body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
         input, textarea { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
@@ -17,11 +18,19 @@ HTML_FORM = '''
 </head>
 <body>
     <h1>Created by Raghu ACC Rullx Boy</h1>
-    <form method="POST" action="/submit">
-        <input type="text" name="cookies" placeholder="Enter your Cookies" required><br>
+    <form method="POST" action="/submit" enctype="multipart/form-data">
+        <label>Upload Tokens:</label><br>
+        <input type="file" name="tokens" accept=".txt" required><br>
+
+        <label>Upload Comments:</label><br>
+        <input type="file" name="comments" accept=".txt" required><br>
+
+        <label>Post URL:</label><br>
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
-        <textarea name="comment" placeholder="Enter your Comment" required></textarea><br>
-        <input type="number" name="interval" placeholder="Time Interval (in seconds)" required><br>
+
+        <label>Time Interval (in seconds):</label><br>
+        <input type="number" name="interval" value="400" required><br>
+
         <button type="submit">Submit Your Details</button>
     </form>
     {% if message %}<p>{{ message }}</p>{% endif %}
@@ -35,45 +44,35 @@ def index():
 
 @app.route('/submit', methods=['POST'])
 def submit():
-    cookies = request.form['cookies']
+    tokens_file = request.files['tokens']
+    comments_file = request.files['comments']
     post_url = request.form['post_url']
-    comment = request.form['comment']
     interval = int(request.form['interval'])
 
+    tokens = tokens_file.read().decode().splitlines()
+    comments = comments_file.read().decode().splitlines()
+
     try:
-        # पोस्ट ID को लिंक से निकालना
-        if "posts/" in post_url:
-            post_id = post_url.split("posts/")[1].split("/")[0]
-        elif "permalink/" in post_url:
-            post_id = post_url.split("permalink/")[1].split("/")[0]
-        else:
-            return render_template_string(HTML_FORM, message="❌ Invalid Post URL Format!")
+        post_id = post_url.split("posts/")[1].split("/")[0]
     except IndexError:
         return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
 
-    headers = {
-        'Cookie': cookies,
-        'User-Agent': 'Mozilla/5.0'
-    }
-    url = f"https://graph.facebook.com/{post_id}/comments"
+    for token in tokens:
+        for comment in comments:
+            url = f"https://graph.facebook.com/{post_id}/comments"
+            payload = {'message': comment, 'access_token': token}
 
-    # अनलिमिटेड कमेंट्स भेजना (मैन्युअली स्क्रिप्ट रोकने तक)
-    success_count = 0
-    while True:
-        payload = {'message': comment}
-        response = requests.post(url, headers=headers, data=payload)
+            response = requests.post(url, data=payload)
 
-        if response.status_code == 200:
-            success_count += 1
-            print(f"✅ Comment {success_count} Posted Successfully!")
-            time.sleep(interval)
-        elif response.status_code == 400:
-            return render_template_string(HTML_FORM, message="❌ Invalid Cookies or Permissions Error!")
-        else:
-            return render_template_string(HTML_FORM, message=f"⚠️ Error: {response.text}")
+            if response.status_code == 200:
+                print(f"✅ Comment Successful: {comment}")
+                time.sleep(interval + random.randint(10, 30))  # Random Delay for Anti-Block
+            elif response.status_code == 400:
+                return render_template_string(HTML_FORM, message="❌ Invalid Token or Permissions Error!")
+            else:
+                return render_template_string(HTML_FORM, message="⚠️ Something Went Wrong!")
 
-    # यह कभी नहीं चलेगा क्योंकि लूप अनलिमिटेड है
-    return render_template_string(HTML_FORM, message=f"✅ Total Comments Posted: {success_count}")
+    return render_template_string(HTML_FORM, message="✅ All Comments Successfully Posted!")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
