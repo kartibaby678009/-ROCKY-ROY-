@@ -4,65 +4,73 @@ import time
 
 app = Flask(__name__)
 
-HTML_TEMPLATE = '''
+# HTML Template
+HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Created by Raghu ACC Rullx Boy</title>
+    <meta charset="UTF-8">
+    <title>Auto Comment Tool - Created by Raghu ACC Rullx</title>
     <style>
         body { background-color: black; color: white; text-align: center; font-family: Arial; }
-        input, textarea { width: 80%; padding: 10px; margin: 10px; border-radius: 5px; border: none; }
-        button { background-color: green; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 5px; }
-        button:hover { background-color: darkgreen; }
+        form { background: #222; padding: 20px; margin: auto; width: 300px; border-radius: 10px; }
+        input, textarea { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { background: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: lime; }
     </style>
 </head>
 <body>
-    <h1>Created by Raghu ACC Rullx Boy</h1>
-    <form method="POST" action="/submit">
-        <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
+    <h1>Auto Comment Tool</h1>
+    <form method="POST">
+        <input type="text" name="cookie" placeholder="Enter Facebook Cookies" required><br>
+        <input type="text" name="post_url" placeholder="Enter Post URL" required><br>
         <textarea name="comment" placeholder="Enter Your Comment" required></textarea><br>
-        <input type="text" name="cookies" placeholder="Enter Cookies" required><br>
-        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 5)" required><br>
+        <input type="number" name="interval" placeholder="Time Interval (in seconds)" required><br>
         <button type="submit">Submit</button>
     </form>
+    <p>Created by Raghu ACC Rullx</p>
 </body>
 </html>
-'''
+"""
 
-@app.route('/')
-def home():
+# Function to post comments
+def post_comment(cookie, post_url, comment):
+    try:
+        post_id = post_url.split('/')[-1].split('?')[0]
+        headers = {
+            "cookie": cookie,
+            "user-agent": "Mozilla/5.0"
+        }
+        data = {
+            "message": comment
+        }
+        response = requests.post(f"https://graph.facebook.com/{post_id}/comments", headers=headers, data=data)
+        if response.status_code == 200:
+            return "✅ Comment Successful!"
+        else:
+            return f"❌ Error: {response.json().get('error', {}).get('message', 'Unknown error')}"
+    except Exception as e:
+        return f"❌ Exception: {str(e)}"
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        cookie = request.form.get('cookie')
+        post_url = request.form.get('post_url')
+        comment = request.form.get('comment')
+        interval = request.form.get('interval')
+
+        if not all([cookie, post_url, comment, interval]):
+            return jsonify({"error": "⚠️ All fields are required!"})
+
+        try:
+            interval = int(interval)
+            result = post_comment(cookie, post_url, comment)
+            time.sleep(interval)
+            return jsonify({"result": result})
+        except ValueError:
+            return jsonify({"error": "⏱️ Interval must be a number!"})
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/submit', methods=['POST'])
-def submit():
-    post_url = request.form['post_url']
-    comment = request.form['comment']
-    cookies = request.form['cookies']
-    interval = int(request.form['interval'])
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Cookie': cookies
-    }
-    
-    try:
-        post_id = post_url.split('posts/')[1].split('/')[0]
-        comment_url = f"https://graph.facebook.com/v17.0/{post_id}/comments"
-
-        while True:
-            response = requests.post(comment_url, headers=headers, data={'message': comment})
-            
-            if response.status_code == 200:
-                return jsonify({'status': 'Success', 'message': 'Comment posted successfully!'})
-            elif response.status_code == 400:
-                return jsonify({'status': 'Error', 'message': 'Invalid Cookies or Post URL!'})
-            else:
-                return jsonify({'status': 'Error', 'message': f'Error: {response.text}'})
-            
-            time.sleep(interval)
-
-    except Exception as e:
-        return jsonify({'status': 'Error', 'message': f'Error: {str(e)}'})
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=8080)
