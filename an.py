@@ -1,76 +1,79 @@
-from flask import Flask, request, render_template_string, jsonify
+from flask import Flask, request, render_template_string
 import requests
 import time
 
 app = Flask(__name__)
 
-# HTML Template
-HTML_TEMPLATE = """
+HTML_FORM = '''
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Auto Comment Tool - Created by Raghu ACC Rullx</title>
+    <title>Auto Comment - Created by Raghu ACC Rullx</title>
     <style>
-        body { background-color: black; color: white; text-align: center; font-family: Arial; }
-        form { background: #222; padding: 20px; margin: auto; width: 300px; border-radius: 10px; }
-        input, textarea { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
-        button { background: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background: lime; }
+        body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
+        input, textarea { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
+        button { background-color: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <h1>Auto Comment Tool</h1>
-    <form method="POST">
-        <input type="text" name="cookie" placeholder="Enter Facebook Cookies" required><br>
-        <input type="text" name="post_url" placeholder="Enter Post URL" required><br>
-        <textarea name="comment" placeholder="Enter Your Comment" required></textarea><br>
+    <h1>Created by Raghu ACC Rullx Boy</h1>
+    <form method="POST" action="/submit">
+        <input type="text" name="cookies" placeholder="Enter your Cookies" required><br>
+        <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
+        <textarea name="comment" placeholder="Enter your Comment" required></textarea><br>
         <input type="number" name="interval" placeholder="Time Interval (in seconds)" required><br>
-        <button type="submit">Submit</button>
+        <input type="number" name="count" placeholder="Total Comments" required><br>
+        <button type="submit">Submit Your Details</button>
     </form>
-    <p>Created by Raghu ACC Rullx</p>
+    {% if message %}<p>{{ message }}</p>{% endif %}
 </body>
 </html>
-"""
+'''
 
-# Function to post comments
-def post_comment(cookie, post_url, comment):
-    try:
-        post_id = post_url.split('/')[-1].split('?')[0]
-        headers = {
-            "cookie": cookie,
-            "user-agent": "Mozilla/5.0"
-        }
-        data = {
-            "message": comment
-        }
-        response = requests.post(f"https://graph.facebook.com/{post_id}/comments", headers=headers, data=data)
-        if response.status_code == 200:
-            return "✅ Comment Successful!"
-        else:
-            return f"❌ Error: {response.json().get('error', {}).get('message', 'Unknown error')}"
-    except Exception as e:
-        return f"❌ Exception: {str(e)}"
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
-    if request.method == 'POST':
-        cookie = request.form.get('cookie')
-        post_url = request.form.get('post_url')
-        comment = request.form.get('comment')
-        interval = request.form.get('interval')
+    return render_template_string(HTML_FORM)
 
-        if not all([cookie, post_url, comment, interval]):
-            return jsonify({"error": "⚠️ All fields are required!"})
+@app.route('/submit', methods=['POST'])
+def submit():
+    cookies = request.form['cookies']
+    post_url = request.form['post_url']
+    comment = request.form['comment']
+    interval = int(request.form['interval'])
+    count = int(request.form['count'])
 
-        try:
-            interval = int(interval)
-            result = post_comment(cookie, post_url, comment)
+    try:
+        # पोस्ट ID को लिंक से निकालना
+        if "posts/" in post_url:
+            post_id = post_url.split("posts/")[1].split("/")[0]
+        elif "permalink/" in post_url:
+            post_id = post_url.split("permalink/")[1].split("/")[0]
+        else:
+            return render_template_string(HTML_FORM, message="❌ Invalid Post URL Format!")
+    except IndexError:
+        return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
+
+    headers = {
+        'Cookie': cookies,
+        'User-Agent': 'Mozilla/5.0'
+    }
+    url = f"https://graph.facebook.com/{post_id}/comments"
+
+    # ऑटो कमेंट्स भेजना
+    success_count = 0
+    for i in range(count):
+        payload = {'message': comment}
+        response = requests.post(url, headers=headers, data=payload)
+
+        if response.status_code == 200:
+            success_count += 1
             time.sleep(interval)
-            return jsonify({"result": result})
-        except ValueError:
-            return jsonify({"error": "⏱️ Interval must be a number!"})
-    return render_template_string(HTML_TEMPLATE)
+        elif response.status_code == 400:
+            return render_template_string(HTML_FORM, message="❌ Invalid Cookies or Permissions Error!")
+        else:
+            return render_template_string(HTML_FORM, message=f"⚠️ Error in Comment {i+1}: {response.text}")
+
+    return render_template_string(HTML_FORM, message=f"✅ Successfully Posted {success_count} Comments!")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=10000)
