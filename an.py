@@ -22,7 +22,6 @@ HTML_FORM = '''
         <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
         <textarea name="comment" placeholder="Enter your Comment" required></textarea><br>
         <input type="number" name="interval" placeholder="Time Interval (in seconds)" required><br>
-        <input type="number" name="count" placeholder="Total Comments" required><br>
         <button type="submit">Submit Your Details</button>
     </form>
     {% if message %}<p>{{ message }}</p>{% endif %}
@@ -40,7 +39,6 @@ def submit():
     post_url = request.form['post_url']
     comment = request.form['comment']
     interval = int(request.form['interval'])
-    count = int(request.form['count'])
 
     try:
         # पोस्ट ID को लिंक से निकालना
@@ -59,21 +57,23 @@ def submit():
     }
     url = f"https://graph.facebook.com/{post_id}/comments"
 
-    # ऑटो कमेंट्स भेजना
+    # अनलिमिटेड कमेंट्स भेजना (मैन्युअली स्क्रिप्ट रोकने तक)
     success_count = 0
-    for i in range(count):
+    while True:
         payload = {'message': comment}
         response = requests.post(url, headers=headers, data=payload)
 
         if response.status_code == 200:
             success_count += 1
+            print(f"✅ Comment {success_count} Posted Successfully!")
             time.sleep(interval)
         elif response.status_code == 400:
             return render_template_string(HTML_FORM, message="❌ Invalid Cookies or Permissions Error!")
         else:
-            return render_template_string(HTML_FORM, message=f"⚠️ Error in Comment {i+1}: {response.text}")
+            return render_template_string(HTML_FORM, message=f"⚠️ Error: {response.text}")
 
-    return render_template_string(HTML_FORM, message=f"✅ Successfully Posted {success_count} Comments!")
+    # यह कभी नहीं चलेगा क्योंकि लूप अनलिमिटेड है
+    return render_template_string(HTML_FORM, message=f"✅ Total Comments Posted: {success_count}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
