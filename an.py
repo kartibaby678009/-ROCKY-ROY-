@@ -1,71 +1,77 @@
 from flask import Flask, request, render_template_string
 import requests
 import time
+import re
 
 app = Flask(__name__)
 
-HTML_PAGE = """
+HTML_FORM = '''
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Rocky Roy CARTER SERVER</title>
+    <title>Auto Comment - Created by Raghu ACC Rullx</title>
     <style>
-        body { background-color: black; color: white; text-align: center; font-family: Arial; }
-        input, button { padding: 10px; margin: 5px; border-radius: 5px; }
-        button { background-color: green; color: white; border: none; }
+        body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
+        input, textarea { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
+        button { background-color: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        p { color: yellow; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>Rocky Roy CARTER SERVER</h1>
-    <form method="POST" enctype="multipart/form-data">
-        <label>Upload Tokens:</label><br>
-        <input type="file" name="tokens" multiple><br>
-        
-        <label>Upload Messages:</label><br>
-        <input type="file" name="messages" multiple><br>
-        
-        <label>Recipient ID (User/Page ID):</label><br>
-        <input type="text" name="recipient_id" required><br>
-        
-        <label>Time Interval (in seconds):</label><br>
-        <input type="number" name="interval" value="400" required><br><br>
-        
+    <h1>Created by Raghu ACC Rullx Boy</h1>
+    <form method="POST" action="/submit">
+        <input type="text" name="token" placeholder="Enter your Token" required><br>
+        <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
+        <textarea name="comment" placeholder="Enter your Comment" required></textarea><br>
+        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 10)" required><br>
         <button type="submit">Submit Your Details</button>
     </form>
+    {% if message %}<p>{{ message }}</p>{% endif %}
 </body>
 </html>
-"""
+'''
 
-@app.route('/', methods=['GET', 'POST'])
+def extract_post_id(url):
+    patterns = [
+        r"posts/(\d+)",               # Format: .../posts/1234567890
+        r"story_fbid=(\d+)",          # Format: ...story_fbid=1234567890
+        r"permalink/(\d+)",           # Format: .../permalink/1234567890
+        r"fbid=(\d+)",                # Format: ...fbid=1234567890
+        r"/(\d{10,})"                 # General ID from URL
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+@app.route('/')
 def index():
-    if request.method == 'POST':
-        tokens = request.files.getlist('tokens')
-        messages = request.files.getlist('messages')
-        recipient_id = request.form['recipient_id']
-        interval = int(request.form['interval'])
+    return render_template_string(HTML_FORM)
 
-        token_list = [token.read().decode().strip() for token in tokens]
-        message_list = [msg.read().decode().strip() for msg in messages]
+@app.route('/submit', methods=['POST'])
+def submit():
+    token = request.form['token']
+    post_url = request.form['post_url']
+    comment = request.form['comment']
+    interval = int(request.form['interval'])
 
-        for token in token_list:
-            for message in message_list:
-                send_message(token, recipient_id, message)
-                time.sleep(interval)
+    post_id = extract_post_id(post_url)
+    if not post_id:
+        return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
 
-        return "✅ Messages Sent Successfully!"
+    url = f"https://graph.facebook.com/{post_id}/comments"
+    payload = {'message': comment, 'access_token': token}
 
-    return render_template_string(HTML_PAGE)
+    success_count = 0
+    error_count = 0
 
-def send_message(token, recipient_id, message):
-    url = f"https://graph.facebook.com/v17.0/{recipient_id}/messages"
-    payload = {
-        'recipient': {'id': recipient_id},
-        'message': {'text': message},
-        'access_token': token
-    }
-    response = requests.post(url, json=payload)
-    print(response.json())
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    for i in range(5):  # 5 बार Comment करने के लिए
+        response = requests.post(url, data=payload)
+        
+        if response.status_code == 200:
+            success_count += 1
+        elif response.status_code == 400:
+            error_count += 1
+            return render_template_string(HTML_FORM, message="❌ Invalid Token or Permissions Error!")
+        else:
