@@ -1,73 +1,82 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request
 import requests
 import time
 
 app = Flask(__name__)
 
-HTML_FORM = '''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Auto Comment - Created by Raghu ACC Rullx</title>
-    <style>
-        body { background-color: black; color: white; text-align: center; font-family: Arial, sans-serif; }
-        input, textarea { width: 300px; padding: 10px; margin: 5px; border-radius: 5px; }
-        button { background-color: green; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background-color: darkgreen; }
-    </style>
-</head>
-<body>
-    <h1>Created by Raghu ACC Rullx Boy</h1>
-    <form method="POST" action="/submit">
-        <input type="text" name="token" placeholder="Enter your Token" required><br>
-        <input type="text" name="post_url" placeholder="Enter Facebook Post URL" required><br>
-        <textarea name="comment" placeholder="Enter your Comment" required></textarea><br>
-        <input type="number" name="interval" placeholder="Interval in Seconds (e.g., 5)" required><br>
-        <button type="submit">Submit Your Details</button>
-    </form>
-    {% if message %}<p>{{ message }}</p>{% endif %}
-</body>
-</html>
-'''
+# Facebook Graph API URL (अपना Post ID यहाँ डालें)
+FB_POST_URL = "https://graph.facebook.com/v19.0/YOUR_POST_ID/comments"
 
-@app.route('/')
+# Function to Post Comment
+def post_comment(cookies, user_agent, comment):
+    headers = {
+        "User-Agent": user_agent,
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    data = {
+        "message": comment
+    }
+
+    response = requests.post(FB_POST_URL, headers=headers, cookies=cookies, data=data)
+
+    if response.status_code == 200:
+        return "✅ Comment Sent Successfully!"
+    else:
+        return f"❌ Failed to Comment! Error: {response.text}"
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    return render_template_string(HTML_FORM)
+    html_form = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Facebook Auto Comment Tool</title>
+    </head>
+    <body>
+        <h2>Facebook Auto Comment Tool</h2>
+        <form method="POST">
+            <label>Enter Facebook Cookies (One per line):</label><br>
+            <textarea name="cookies" required></textarea><br><br>
 
-@app.route('/submit', methods=['POST'])
-def submit():
-    token = request.form['token']
-    post_url = request.form['post_url']
-    comment = request.form['comment']
-    interval = int(request.form['interval'])
+            <label>Enter User-Agent:</label><br>
+            <input type="text" name="user_agent" value="Mozilla/5.0 (Windows NT 10.0; Win64; x64)" required><br><br>
 
-    # Post ID Extract करने का तरीका अपडेट किया गया
-    try:
-        post_id = post_url.split("posts/")[1].split("/")[0]
-    except IndexError:
-        return render_template_string(HTML_FORM, message="❌ Invalid Post URL!")
+            <label>Enter Comments (One per line):</label><br>
+            <textarea name="comments" required></textarea><br><br>
 
-    url = f"https://graph.facebook.com/{post_id}/comments"
-    payload = {'message': comment, 'access_token': token}
+            <label>Enter Time Interval (Seconds):</label><br>
+            <input type="number" name="time_interval" value="400" required><br><br>
 
-    success_count = 0
-    for i in range(5):  # 5 बार Comment करने के लिए (आवश्यकतानुसार बदल सकते हो)
-        try:
-            response = requests.post(url, data=payload)
+            <button type="submit">Submit</button>
+        </form>
+    """
 
-            if response.status_code == 200:
-                success_count += 1
-            elif response.status_code == 400:
-                return render_template_string(HTML_FORM, message="❌ Invalid Token or Permissions Error!")
-            else:
-                return render_template_string(HTML_FORM, message="⚠️ Something Went Wrong!")
+    if request.method == "POST":
+        cookies_text = request.form["cookies"]
+        comments_text = request.form["comments"]
+        user_agent = request.form["user_agent"]
+        time_interval = int(request.form["time_interval"])
 
-            time.sleep(interval)  # Slow Commenting के लिए
+        # Cookies और Comments को Process करें
+        cookies_list = [cookie.strip() for cookie in cookies_text.split("\n") if cookie.strip()]
+        comments_list = [comment.strip() for comment in comments_text.split("\n") if comment.strip()]
 
-        except requests.exceptions.RequestException:
-            return render_template_string(HTML_FORM, message="⚠️ Network Error Occurred!")
+        if not cookies_list or not comments_list:
+            return html_form + "<h3>❌ Error: Cookies और Comments खाली नहीं होने चाहिए!</h3></body></html>"
 
-    return render_template_string(HTML_FORM, message=f"✅ {success_count} Comments Successfully Posted!")
+        result_logs = ""
+        for i, comment in enumerate(comments_list):
+            cookies = {cookie.split("=")[0]: cookie.split("=")[1] for cookie in cookies_list[i % len(cookies_list)].split("; ")}
+            result = post_comment(cookies, user_agent, comment)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+            print(f"[INFO] {result}")  # Render Logs में दिखाने के लिए
+            result_logs += f"<p>{result}</p>"
+            time.sleep(time_interval)
+
+        return html_form + f"<h3>✅ सभी Comments भेज दिए गए!</h3>{result_logs}</body></html>"
+
+    return html_form + "</body></html>"
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=10000)
